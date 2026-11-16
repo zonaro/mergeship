@@ -242,7 +242,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE assets
 	${CMAKE_CURRENT_SOURCE_DIR}/include/
 	${CMAKE_CURRENT_SOURCE_DIR}/include/PR
 	${CMAKE_CURRENT_SOURCE_DIR}/src/
-    ${CMAKE_CURRENT_SOURCE_DIR}/../libultraship/include
+    ${MERGESHIP_LUS_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../ZAPDTR/ZAPD/resource/type
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/2s2h/
