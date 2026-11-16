@@ -40,7 +40,7 @@ Every MergeShip feature is optional, from the **Mergeship** menu in either game.
 </tr>
 </table>
 
-**No game data is included.** You need your own Ocarina of Time and Majora's Mask ROMs. On its first run the game
+**No game ROM data is included.** You need your own Ocarina of Time and Majora's Mask ROMs. On its first run the game
 builds `oot.o2r` and `mm.o2r` from them.
 
 Player builds: https://odysseyapp.fun/mergeship-dist-latest.zip
