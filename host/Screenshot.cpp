@@ -3,7 +3,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #else
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #endif
 
 #include <cstdio>
