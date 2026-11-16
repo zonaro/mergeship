@@ -1,6 +1,6 @@
 # Native Linux port — epic and child-issue backlog
 
-> **Issue tracker is now enabled.** Epic [#3](https://github.com/zonaro/mergeship/issues/3) has linked issue-checklist references to #4–#14. Native GitHub sub-issue hierarchy still needs manual linking; the connected issue tools do not provide a sub-issue mutation.
+> **Issue tracker is now enabled.** Epic [#3](https://github.com/zonaro/mergeship/issues/3) has linked issue-checklist references to #4–#14 and optional MPQ follow-up #26. Native GitHub sub-issue hierarchy still needs manual linking; the connected issue tools do not provide a sub-issue mutation.
 
 ## EPIC: Native Linux port (ELF, shared engines, original-story parity)
 
@@ -31,14 +31,19 @@ Review related risk areas during implementation:
 ### Local Linux probe (first implementation slice)
 
 ```sh
-cmake -S host -B build/linux-host -G Ninja -DCMAKE_BUILD_TYPE=Debug
-cmake --build build/linux-host --target mergeship-linux-probe
-./build/linux-host/mergeship-linux-probe --help
-# After shared engines are built:
-./build/linux-host/mergeship-linux-probe ./libsoh.so ./lib2ship.so
+cmake -S host -B build/linux-host -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DMERGESHIP_BUILD_LINUX_HOST=OFF
+cmake --build build/linux-host -j 2
+ctest --test-dir build/linux-host --output-on-failure
+
+# Full hosted build and ROM-free staging:
+bash tools/install_linux_build_deps.sh
+JOBS=4 bash tools/build_linux_engines.sh
+cd build/linux/stage
+./mergeship --check-engines
+./run-mergeship.sh
 ```
 
-The probe only tests dynamic loading and the host-defined engine ABI. It **does not** render a window, run the game, validate the actual libultraship runtime ABI independently, or prove that the hosted engines compile on Linux.
+The fast probe/CTest job uses mock ELF modules and tests loader behavior only. The full build script configures SoH, 2Ship and host, stages the real modules and then runs the host's headless `--check-engines` against their exported API and shared libultraship ABI. Neither check is a substitute for first-run extraction and actual gameplay.
 
 ## Implementation notes — 2026-11-16
 
@@ -57,13 +62,23 @@ The probe only tests dynamic loading and the host-defined engine ABI. It **does 
 
 - Enabled position-independent code for hosted Linux SoH and 2Ship builds, including LUS shared objects.
 - Added ELF `-Wl,-Bsymbolic` to both hosted game modules to reduce cross-engine symbol interposition when loaded together. The host loader continues to use `RTLD_LOCAL`.
-- Added `tools/build_linux_engines.sh`: separate Ninja/CMake trees, `MERGESHIP_HOSTED=ON`, exact LUS submodule revision parity check, and builds of each game plus its project-owned OTR target.
+- Added `tools/build_linux_engines.sh`: separate Ninja/CMake trees, `MERGESHIP_HOSTED=ON`, one shared `Shipwright/libultraship` source selected for SoH, 2Ship and host, and builds of each game plus its project-owned O2R target.
 - CI now validates the script syntax and watches the engine CMake files.
-- **Not yet verified:** full game-engine configuration/compilation, shared runtime ABI parity, and actual module startup. The build script has not been executed in a Linux environment with all dependencies installed. Its success message is explicitly limited to engine module builds, not a playable host.
+- The full build workflow is now configured in `.github/workflows/linux-build.yml`; its first successful engine build and staged `--check-engines` are still pending. Do not claim playable gameplay until the ROM extraction flow and both normal campaigns are tested.
 
 ## Host networking compilation coverage — 2026-11-16
 
 - Added a dedicated Linux CMake object target for `host/NetService.cpp`. Its POSIX socket branch already uses BSD sockets, non-blocking connect, `select`, `MSG_NOSIGNAL`, and TCP keepalive; it is now compiled by the Linux CI build rather than being left unverified.
 - Added a separate object target for `EngineModule.cpp` to keep the ELF loader independently compile-checked.
 - These are compile checks only: Anchor server interoperability and network behavior still need integration tests.
-- The full host remains blocked by Win32-only main-loop/window discovery, screenshot and frame-recorder implementations. Linux screenshot/video capture is not silently advertised as supported.
+- The Linux host now has POSIX path/config handling, atomic shared-save writes, portable logging/shutdown, SDL title and Ctrl+F12 handling, and a headless `--check-engines` mode. Screenshot and frame recording remain explicit Linux stubs; they are tracked separately in #13.
+
+## Native host integration — 2026-11-16
+
+- Added a real Linux `mergeship` executable target linked to one shared `libultraship.so`, SDL2, Threads and `dl`; the fast probe remains available with `MERGESHIP_BUILD_LINUX_HOST=OFF`.
+- Added POSIX XDG config carry, executable-directory discovery, atomic shared-save writes, local-time logging, SDL window title updates, Ctrl+F12 state and normal process shutdown. Windows code remains behind `_WIN32` guards.
+- Linux module filenames are `soh.so` and `2ship.so`; the host loads them from its own directory and verifies their exported engine API and LUS ABI before initialization using `--check-engines`.
+- 2Ship's CMake now accepts `MERGESHIP_LUS_SOURCE_DIR`; the Linux build script points it at the exact same vendored LUS source used by SoH and host.
+- The first hosted Linux build defaults legacy MPQ/`.otr` support OFF because the StormLib v9.25 optimization patch fails to apply. Modern `.o2r` extraction remains enabled. Optional restoration is tracked in [#26](https://github.com/zonaro/mergeship/issues/26).
+- Added `tools/install_linux_build_deps.sh`, `docs/LINUX_TESTING.md` and `.github/workflows/linux-build.yml`. The workflow uploads a ROM-free tar.gz only after both engines, host, staging and the headless ABI check pass.
+- Current Linux limitations: screenshots and frame recording are not implemented; actual first boot, controller/audio behavior, save compatibility and cross-world gameplay still require a manual CachyOS test.
