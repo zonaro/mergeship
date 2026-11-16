@@ -30,7 +30,7 @@
 #include <windows.h>
 #else
 #include "LinuxPaths.h"
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <filesystem>
 #include <unistd.h>
 #endif
