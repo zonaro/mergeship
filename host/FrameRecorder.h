@@ -4,7 +4,13 @@
 #include <string>
 #include <vector>
 
-namespace MergeShipHost {
+namespace MergeShip {
+
+#ifdef _WIN32
+using HostPathString = std::wstring;
+#else
+using HostPathString = std::string;
+#endif
 
 // --record FILE: every frame the host runs, captured from the game window and piped to ffmpeg (one video frame per
 // game frame, 60 fps, so the video's timeline is the game's frame count). FILE.frames.csv maps each video frame to
@@ -15,7 +21,7 @@ class FrameRecorder {
     ~FrameRecorder();
 
     // ffmpeg: the ffmpeg executable (a bare name is looked up on PATH).
-    void Open(const std::wstring& path, const std::wstring& ffmpeg);
+    void Open(const HostPathString& path, const HostPathString& ffmpeg);
     void Frame(uint64_t hostFrame, const char* engine);
     void Close();
     bool Active() const {
@@ -27,8 +33,8 @@ class FrameRecorder {
 
     bool mWanted = false;
     bool mFailed = false;
-    std::wstring mPath;
-    std::wstring mFfmpeg;
+    HostPathString mPath;
+    HostPathString mFfmpeg;
     void* mPipe = nullptr;    // HANDLE: ffmpeg's stdin
     void* mProcess = nullptr; // HANDLE
     int mWidth = 0;
