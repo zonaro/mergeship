@@ -2,6 +2,8 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <SDL2/SDL.h>
 #endif
 
 #include <cstdio>
@@ -143,8 +145,6 @@ bool CaptureWindowToBmp(void* windowHandle, const std::wstring& path) {
 }
 
 #else
-
-#include <SDL2/SDL.h>
 
 void* FindGameWindow() {
     SDL_Window* window = SDL_GetKeyboardFocus();
