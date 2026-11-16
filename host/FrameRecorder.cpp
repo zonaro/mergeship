@@ -1,7 +1,9 @@
 #include "FrameRecorder.h"
 #include "Screenshot.h"
 
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 #include <algorithm>
 #include <cstdio>
@@ -9,11 +11,13 @@
 
 namespace MergeShipHost {
 
+#ifdef _WIN32
+
 FrameRecorder::~FrameRecorder() {
     Close();
 }
 
-void FrameRecorder::Open(const std::wstring& path, const std::wstring& ffmpeg) {
+void FrameRecorder::Open(const HostPathString& path, const HostPathString& ffmpeg) {
     mPath = path;
     mFfmpeg = ffmpeg.empty() ? L"ffmpeg" : ffmpeg;
     mWanted = !path.empty();
@@ -122,5 +126,26 @@ void FrameRecorder::Close() {
         mProcess = nullptr;
     }
 }
+
+#else
+
+FrameRecorder::~FrameRecorder() {
+    Close();
+}
+
+void FrameRecorder::Open(const HostPathString&, const HostPathString&) {
+    // Video capture is deliberately disabled until a portable SDL/OpenGL capture backend is implemented.
+    mWanted = false;
+    mFailed = false;
+}
+
+void FrameRecorder::Frame(uint64_t, const char*) {
+}
+
+void FrameRecorder::Close() {
+    mWanted = false;
+}
+
+#endif
 
 } // namespace MergeShipHost
