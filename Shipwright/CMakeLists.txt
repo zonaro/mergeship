@@ -21,7 +21,12 @@ option(USE_ASAN "Use Address Sanitizer" OFF)
 option(MERGESHIP_HOSTED "Build soh.dll for the MergeShip2 host" OFF)
 if(MERGESHIP_HOSTED)
     set(LUS_SHARED ON CACHE BOOL "" FORCE)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    if(WIN32)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # Every object linked into the hosted ELF module must be position independent.
+        set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    endif()
 endif()
 
 option(SUPPRESS_WARNINGS "Suppress warnings in LUS and src (decomp)" ON)
