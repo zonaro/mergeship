@@ -109,6 +109,8 @@ struct Options {
     PlatformString record;
     PlatformString ffmpeg;
     bool debugSwitch = false;
+    bool checkEngines = false;
+    bool help = false;
 };
 
 Options ParseOptions(int argc, char** argv) {
@@ -137,6 +139,10 @@ Options ParseOptions(int argc, char** argv) {
             options.settleSeconds = atof(next().c_str());
         } else if (arg == "--debug-switch") {
             options.debugSwitch = true;
+        } else if (arg == "--check-engines") {
+            options.checkEngines = true;
+        } else if (arg == "--help" || arg == "-h") {
+            options.help = true;
         } else if (arg == "--record") {
             options.record = ToPlatformString(next());
         } else if (arg == "--ffmpeg") {
@@ -317,6 +323,7 @@ struct Engine {
     std::string key; // "soh" / "2ship"
     PlatformString dll;
     EngineModule module;
+    bool initialized = false;
 };
 
 class Host {
@@ -599,6 +606,7 @@ bool Host::InitEngines(int argc, char** argv) {
             Logf("ERROR: %s failed to initialize", engine.module.Name().c_str());
             return false;
         }
+        engine.initialized = true;
         Logf("%s initialized in %.2f s", engine.module.Name().c_str(),
              std::chrono::duration<double>(Clock::now() - start).count());
         if (i > 0) {
@@ -666,7 +674,10 @@ void Host::Exit(int code) {
     Logf("shutting down (exit code %d)", code);
     mRecorder.Close();
     for (auto& engine : mEngines) {
-        engine->module.Shutdown();
+        if (engine->initialized) {
+            engine->module.Shutdown();
+            engine->initialized = false;
+        }
     }
     mNet.Shutdown(); // closes the Anchor socket cleanly, so the server sees the player leave at once
     Logf("exit %d", code);
@@ -687,6 +698,11 @@ void Host::Exit(int code) {
 int Host::Run(int argc, char** argv) {
     if (!LoadEngines()) {
         Exit(2);
+    }
+    if (mOptions.checkEngines) {
+        Logf("ENGINE CHECK PASSED: %zu module(s) loaded; exports and libultraship ABI match",
+             mEngines.size());
+        return 0;
     }
     if (!InitEngines(argc, argv)) {
         Exit(3);
@@ -839,7 +855,17 @@ int main(int argc, char** argv) {
     sLog = fopen("mergeship-host.log", "w");
 #endif
     Options options = ParseOptions(argc, argv);
-    Logf("mergeship.exe starting (first engine %s%s)", options.first.c_str(), options.only.empty() ? "" : ", only");
+    if (options.help) {
+        puts("MergeShip native host");
+        puts("  --engine soh|2ship   choose which world starts first (default: soh)");
+        puts("  --only soh|2ship     load one game module");
+        puts("  --check-engines      validate both shared modules and their libultraship ABI without opening a window");
+        puts("  --muted              start with audio muted");
+        puts("  --debug-switch       enable Ctrl+F12 manual world switching");
+        puts("  --help               show this help");
+        return 0;
+    }
+    Logf("mergeship starting (first engine %s%s)", options.first.c_str(), options.only.empty() ? "" : ", only");
     // The games' argv: just the program name; host options are not theirs.
     static char* gameArgv[] = { argv[0], nullptr };
     CarryConfigs(false);
