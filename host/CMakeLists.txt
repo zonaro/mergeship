@@ -4,9 +4,10 @@
 # Shipwright/mergeship2/docs/HOST_DESIGN.md.
 #
 # The three trees (this one, SoH's and 2Ship's) are separate CMake builds because their target names
-# collide. Each game tree compiles libultraship again from its own submodule checkout (same commit, checked
-# by build_host.ps1) for its import library and headers; the DLL that ships is this tree's, and the
-# engines refuse to run against a DLL whose LUS_GetAbiId() differs from what they were built against.
+# collide. Windows keeps its established per-engine LUS check from build_host.ps1. The native Linux
+# build points all three trees at the same vendored LUS source directory through MERGESHIP_LUS_SOURCE_DIR;
+# each tree builds an ABI-identical shared libultraship.so and the host stages one copy. The engine loader
+# rejects modules whose embedded LUS_GetAbiId() differs from the runtime library.
 cmake_minimum_required(VERSION 3.26.0 FATAL_ERROR)
 
 if(WIN32 AND NOT ANDROID_ABI) # Avoid forcing a Windows SDK version on Linux
