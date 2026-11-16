@@ -126,6 +126,15 @@ redistribution.
 README
 
 # Verify ELF dependencies and exported engine ABI before declaring the staged build usable.
+for elf in "$STAGE/mergeship" "$STAGE/libultraship.so" "$STAGE/soh.so" "$STAGE/2ship.so"; do
+    missing="$(ldd "$elf" 2>&1 | grep "not found" || true)"
+    if [[ -n "$missing" ]]; then
+        echo "Unresolved runtime dependencies in $elf:" >&2
+        echo "$missing" >&2
+        die "install missing shared libraries before testing this bundle"
+    fi
+done
+
 (
     cd "$STAGE"
     ./mergeship --check-engines
