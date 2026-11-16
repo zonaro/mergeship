@@ -34,6 +34,6 @@ jobs:
           CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
         run: cmake -S host -B build/linux-host -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
       - name: Build
-        run: cmake --build build/linux-host --target mergeship-linux-probe -j 2
+        run: cmake --build build/linux-host --target mergeship-linux-probe mergeship-linux-paths-test -j 2
       - name: Test
         run: ctest --test-dir build/linux-host --output-on-failure
