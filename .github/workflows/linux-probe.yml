@@ -1,0 +1,39 @@
+name: Linux host loader smoke tests
+
+on:
+  push:
+    branches: [feature/linux-native-port]
+    paths:
+      - 'host/**'
+      - 'include/mergeship/**'
+      - '.github/workflows/linux-probe.yml'
+  pull_request:
+    paths:
+      - 'host/**'
+      - 'include/mergeship/**'
+      - '.github/workflows/linux-probe.yml'
+  workflow_dispatch:
+
+jobs:
+  loader:
+    name: ELF loader / ${{ matrix.compiler }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compiler and Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake g++ clang
+      - name: Configure probe
+        env:
+          CC: ${{ matrix.compiler == 'gcc' && 'gcc' || 'clang' }}
+          CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
+        run: cmake -S host -B build/linux-host -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build/linux-host --target mergeship-linux-probe -j 2
+      - name: Test
+        run: ctest --test-dir build/linux-host --output-on-failure
