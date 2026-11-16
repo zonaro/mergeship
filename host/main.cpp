@@ -144,11 +144,15 @@ Options ParseOptions(int argc, char** argv) {
     return options;
 }
 
-std::wstring ExeDirectory() {
+std::filesystem::path ExeDirectory() {
+#ifdef _WIN32
     wchar_t path[MAX_PATH];
     const DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
     std::wstring dir(path, length);
-    return dir.substr(0, dir.find_last_of(L"\\/"));
+    return std::filesystem::path(dir.substr(0, dir.find_last_of(L"\\/")));
+#else
+    return MergeShipHost::LinuxPaths::ExecutableDirectory();
+#endif
 }
 
 void HostLog(void*, int32_t level, const char* message) {
@@ -164,9 +168,9 @@ const char* EngineKey(int32_t id) {
 // session's) and exit, and a folder without its own config takes that copy. Test runs (a script set) neither take
 // nor refresh it: their configs are the test's.
 void CarryConfigs(bool exiting) {
+#ifdef _WIN32
     static const wchar_t* kFiles[] = { L"shipofharkinian.json", L"2ship2harkinian.json", L"imgui.ini" };
     const wchar_t* appData = _wgetenv(L"APPDATA");
-
     if ((appData == nullptr) || (getenv("MERGESHIP_TEST_SCRIPT_SOH") != nullptr) ||
         (getenv("MERGESHIP_TEST_SCRIPT_2SHIP") != nullptr)) {
         return;
@@ -181,9 +185,16 @@ void CarryConfigs(bool exiting) {
             CopyFileW(name, saved.c_str(), FALSE);
         } else if (!exiting && (GetFileAttributesW(saved.c_str()) != INVALID_FILE_ATTRIBUTES) &&
                    CopyFileW(saved.c_str(), name, TRUE)) {
-            Logf("settings: %ls taken from the last install (%ls)", name, saved.c_str());
+            Logf("settings restored from the previous installation");
         }
     }
+#else
+    try {
+        MergeShipHost::LinuxPaths::CarryConfigs(exiting, std::filesystem::current_path());
+    } catch (const std::exception& error) {
+        Logf("warning: settings persistence failed: %s", error.what());
+    }
+#endif
 }
 
 // The shared saves (include/mergeship/SharedSave.h), one per Ocarina of Time file slot, kept next to SoH's own
