@@ -868,6 +868,10 @@ int main(int argc, char** argv) {
     Logf("mergeship starting (first engine %s%s)", options.first.c_str(), options.only.empty() ? "" : ", only");
     // The games' argv: just the program name; host options are not theirs.
     static char* gameArgv[] = { argv[0], nullptr };
+#ifndef _WIN32
+    // SDL_MAIN_HANDLED is used by the shared host; mark the host's main as ready before either engine calls SDL_Init.
+    SDL_SetMainReady();
+#endif
     CarryConfigs(false);
     Host host(options);
     const int result = host.Run(1, gameArgv);
