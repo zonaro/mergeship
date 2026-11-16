@@ -69,6 +69,11 @@ MM_OTR="$(find_one "$BUILD/2ship" 2ship.o2r)"
 SOH_OUT="$(dirname "$SOH_MODULE")"
 MM_OUT="$(dirname "$MM_MODULE")"
 
+ROOT_ABS="$(realpath "$ROOT")"
+STAGE_ABS="$(realpath -m "$STAGE")"
+[[ "$STAGE_ABS" != "/" && "$STAGE_ABS" != "$ROOT_ABS" && "$STAGE_ABS" != "$ROOT_ABS/Shipwright" && "$STAGE_ABS" != "$ROOT_ABS/2ship2harkinian" ]] ||
+    die "refusing to clear unsafe staging path: $STAGE_ABS"
+
 rm -rf "$STAGE"
 mkdir -p "$STAGE/assets"
 cp "$HOST_BIN" "$LUS_LIB" "$SOH_MODULE" "$MM_MODULE" "$SOH_OTR" "$MERGESHIP_OTR" "$MM_OTR" "$STAGE/"
