@@ -14,7 +14,7 @@ elif command -v apt-get >/dev/null 2>&1; then
     sudo apt-get install -y \
         build-essential git cmake ninja-build python3 pkg-config curl \
         libsdl2-dev libsdl2-net-dev libglew-dev libglfw3-dev libzip-dev \
-        libogg-dev libvorbis-dev libopus-dev libopusfile-dev libpng-dev \
+        libogg-dev libvorbis-dev libopus-dev libopusfile-dev libpng-dev zipcmp zipmerge ziptool \
         nlohmann-json3-dev libtinyxml2-dev libspdlog-dev libfmt-dev \
         zlib1g-dev libbz2-dev libusb-1.0-0-dev \
         libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxss-dev \
