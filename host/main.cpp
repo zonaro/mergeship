@@ -311,7 +311,7 @@ class SharedSaveStore {
 
 struct Engine {
     std::string key; // "soh" / "2ship"
-    std::wstring dll;
+    PlatformString dll;
     EngineModule module;
 };
 
@@ -522,18 +522,27 @@ void Host::TransferTestStep(double sinceStart) {
 }
 
 bool Host::LoadEngines() {
-    std::vector<std::pair<std::string, std::wstring>> wanted;
+    std::vector<std::pair<std::string, PlatformString>> wanted;
+#ifdef _WIN32
+    const auto modulePath = [](const std::string& key) { return ToPlatformString(key) + L".dll"; };
+#else
+    const auto modulePath = [](const std::string& key) { return key + ".so"; };
+#endif
     if (!mOptions.only.empty()) {
-        wanted.push_back({ mOptions.only, Widen(mOptions.only) + L".dll" });
+        wanted.push_back({ mOptions.only, modulePath(mOptions.only) });
     } else {
         // The first engine owns the window, audio device and controllers.
         const std::string second = mOptions.first == "soh" ? "2ship" : "soh";
-        wanted.push_back({ mOptions.first, Widen(mOptions.first) + L".dll" });
-        wanted.push_back({ second, Widen(second) + L".dll" });
+        wanted.push_back({ mOptions.first, modulePath(mOptions.first) });
+        wanted.push_back({ second, modulePath(second) });
     }
 
     const char* lusAbi = LUS_GetAbiId();
+#ifdef _WIN32
     Logf("libultraship.dll ABI %s", lusAbi);
+#else
+    Logf("libultraship.so ABI %s", lusAbi);
+#endif
     for (auto& [key, dll] : wanted) {
         auto engine = std::make_unique<Engine>();
         engine->key = key;
@@ -599,10 +608,19 @@ bool Host::InitEngines(int argc, char** argv) {
 }
 
 void Host::SetTitle() {
+#ifdef _WIN32
     if (HWND window = static_cast<HWND>(FindGameWindow())) {
-        const std::wstring title = L"MergeShip2 - " + Widen(mEngines[mActive]->module.Name());
+        const std::wstring title = L"MergeShip2 - " + ToPlatformString(mEngines[mActive]->module.Name());
         SetWindowTextW(window, title.c_str());
     }
+#else
+    SDL_Window* window = SDL_GetKeyboardFocus();
+    if (window == nullptr) window = SDL_GetMouseFocus();
+    if (window != nullptr) {
+        const std::string title = "MergeShip - " + mEngines[mActive]->module.Name();
+        SDL_SetWindowTitle(window, title.c_str());
+    }
+#endif
 }
 
 void Host::Switch(const char* why) {
@@ -647,8 +665,12 @@ void Host::Exit(int code) {
     // The games share one window, ImGui context and audio device, and neither can tear those down while
     // the other's objects still point into them. Everything worth keeping (CVars, window placement, saves,
     // logs) was written by Shutdown above.
+#ifdef _WIN32
     TerminateProcess(GetCurrentProcess(), code);
     ExitProcess(code);
+#else
+    std::exit(code);
+#endif
 }
 
 int Host::Run(int argc, char** argv) {
@@ -661,7 +683,11 @@ int Host::Run(int argc, char** argv) {
     SetTitle();
     if (!mOptions.record.empty()) {
         mRecorder.Open(mOptions.record, mOptions.ffmpeg);
+#ifdef _WIN32
         Logf("recording every frame to %ls", mOptions.record.c_str());
+#else
+        Logf("frame recording is not available in this initial Linux host build");
+#endif
     }
 
     const auto begin = Clock::now();
@@ -693,12 +719,21 @@ int Host::Run(int argc, char** argv) {
         }
 
         // Ctrl+F12, while our window has focus.
+#ifdef _WIN32
         DWORD foregroundPid = 0;
         GetWindowThreadProcessId(GetForegroundWindow(), &foregroundPid);
         // The low bit catches a press shorter than a frame (a tap, or injected input).
         const SHORT ctrl = GetAsyncKeyState(VK_CONTROL);
         const SHORT f12 = GetAsyncKeyState(VK_F12);
         const bool hotkeyDown = foregroundPid == GetCurrentProcessId() && (ctrl & 0x8001) && (f12 & 0x8001);
+#else
+        SDL_PumpEvents();
+        int keyCount = 0;
+        const Uint8* keys = SDL_GetKeyboardState(&keyCount);
+        const bool hotkeyDown = keys != nullptr && keyCount > SDL_SCANCODE_F12 &&
+                                (keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_RCTRL]) &&
+                                keys[SDL_SCANCODE_F12];
+#endif
         // Normal play starts in Hyrule and reaches Termina only through the door: no hand switch to the other game's
         // title and file select, unless asked for (--debug-switch).
         if (hotkeyDown && !hotkeyWasDown && mOptions.debugSwitch) {
@@ -786,8 +821,12 @@ int Host::Run(int argc, char** argv) {
 
 int main(int argc, char** argv) {
     // Everything (configs, logs, saves, archives) lives next to mergeship.exe, as with the standalone exes.
-    SetCurrentDirectoryW(ExeDirectory().c_str());
+    std::filesystem::current_path(ExeDirectory());
+#ifdef _WIN32
     sLog = _wfopen(L"mergeship-host.log", L"w");
+#else
+    sLog = fopen("mergeship-host.log", "w");
+#endif
     Options options = ParseOptions(argc, argv);
     Logf("mergeship.exe starting (first engine %s%s)", options.first.c_str(), options.only.empty() ? "" : ", only");
     // The games' argv: just the program name; host options are not theirs.
