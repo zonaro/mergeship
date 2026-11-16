@@ -204,7 +204,12 @@ set(GBI_UCODE F3DEX_GBI_2)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
 
 # Enable MPQ and OTR support
-set(INCLUDE_MPQ_SUPPORT ON)
+option(MERGESHIP_LINUX_MPQ_SUPPORT "Enable legacy MPQ/StormLib support in hosted Linux builds" OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND MERGESHIP_HOSTED)
+    set(INCLUDE_MPQ_SUPPORT ${MERGESHIP_LINUX_MPQ_SUPPORT})
+else()
+    set(INCLUDE_MPQ_SUPPORT ON)
+endif()
 
 ################################################################################
 # Set CONTROLLERBUTTONS_T
@@ -408,7 +413,9 @@ endif()
 ################################################################################
 add_subdirectory(libultraship ${CMAKE_BINARY_DIR}/libultraship SYSTEM)
 quiet_target(libultraship "${WARNING_OVERRIDE}")
-target_compile_definitions(libultraship PUBLIC INCLUDE_MPQ_SUPPORT)
+if(INCLUDE_MPQ_SUPPORT)
+    target_compile_definitions(libultraship PUBLIC INCLUDE_MPQ_SUPPORT)
+endif()
 add_subdirectory(soh)
 
 set_property(TARGET soh PROPERTY APPIMAGE_DESKTOP_FILE_TERMINAL YES)
