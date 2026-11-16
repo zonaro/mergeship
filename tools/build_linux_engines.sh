@@ -112,9 +112,10 @@ Useful options:
   ./run-mergeship.sh --engine 2ship    Start in Termina.
   ./run-mergeship.sh --debug-switch   Enable Ctrl+F12 manual switching.
 
-This is a native test build, not yet an AppImage. Screenshot and frame recording diagnostics are
-not available in this initial Linux host. Do not copy ROMs or ROM-derived archives into this folder
-for redistribution.
+This is a native test build, not yet an AppImage. Legacy MPQ/.otr support is disabled in this
+initial hosted Linux build; the normal .o2r extraction flow is used. Screenshot and frame recording
+diagnostics are not available yet. Do not copy ROMs or ROM-derived archives into this folder for
+redistribution.
 README
 
 # Verify ELF dependencies and exported engine ABI before declaring the staged build usable.
