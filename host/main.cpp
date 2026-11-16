@@ -39,6 +39,10 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+#include <ctime>
+#include <filesystem>
+#include <system_error>
 #include <cwchar>
 #include <map>
 #include <memory>
@@ -642,6 +646,7 @@ void Host::Switch(const char* why) {
 }
 
 void Host::Shot(const wchar_t* name) {
+#ifdef _WIN32
     if (mOptions.shots.empty()) {
         return;
     }
@@ -649,6 +654,12 @@ void Host::Shot(const wchar_t* name) {
     const bool ok = CaptureWindowToBmp(FindGameWindow(), path);
     Logf("screenshot %ls: %s (active %s, frame %llu)", path.c_str(), ok ? "ok" : "FAILED",
          mEngines[mActive]->module.Name().c_str(), (unsigned long long)mFrames);
+#else
+    (void)name;
+    if (!mOptions.shots.empty()) {
+        Logf("screenshots are not available in this initial Linux host build");
+    }
+#endif
 }
 
 void Host::Exit(int code) {
