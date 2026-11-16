@@ -209,7 +209,7 @@ class SharedSaveStore {
         auto save = std::make_unique<MsSharedSave>();
         Reset(*save, slot);
         if (slot >= 0) {
-            if (FILE* file = _wfopen(Path(slot).c_str(), L"rb")) {
+            if (FILE* file = OpenRead(Path(slot))) {
                 auto loadedBuffer = std::make_unique<MsSharedSave>(); // the ledger makes it too big for the stack
                 MsSharedSave& loaded = *loadedBuffer;
                 memset(&loaded, 0, sizeof(loaded));
@@ -252,27 +252,52 @@ class SharedSaveStore {
             return;
         }
         MsSharedSave* save = Get(slot);
-        CreateDirectoryW(L"Save", nullptr);
-        const std::wstring path = Path(slot);
-        const std::wstring temp = path + L".tmp";
-        FILE* file = _wfopen(temp.c_str(), L"wb");
+        std::error_code directoryError;
+        std::filesystem::create_directories("Save", directoryError);
+        if (directoryError) {
+            Logf("ERROR: cannot create shared save directory: %s", directoryError.message().c_str());
+            return;
+        }
+        const std::filesystem::path path = Path(slot);
+        std::filesystem::path temp = path;
+        temp += ".tmp";
+        FILE* file = OpenWrite(temp);
         if (file == nullptr) {
-            Logf("ERROR: cannot write %ls", temp.c_str());
+            Logf("ERROR: cannot open shared save temporary file");
             return;
         }
         const bool ok = fwrite(save, 1, sizeof(*save), file) == sizeof(*save);
+        const bool flushed = fflush(file) == 0;
         fclose(file);
-        if (!ok || !MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
-            Logf("ERROR: cannot write %ls", path.c_str());
+#ifdef _WIN32
+        const bool replaced = MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+#else
+        std::error_code renameError;
+        std::filesystem::rename(temp, path, renameError);
+        const bool replaced = !renameError;
+#endif
+        if (!ok || !flushed || !replaced) {
+            Logf("ERROR: cannot commit shared save (write=%d flush=%d replace=%d)", ok, flushed, replaced);
             return;
         }
         Logf("shared save %d written (generation %u, by %s)", slot, save->generation, EngineKey(save->lastWriter));
     }
 
   private:
-    static std::wstring Path(int32_t slot) {
-        return L"Save\\mergeship_shared_" + std::to_wstring(slot + 1) + L".bin";
+#ifdef _WIN32
+    static std::filesystem::path Path(int32_t slot) {
+        return std::filesystem::path(L"Save") /
+               (L"mergeship_shared_" + std::to_wstring(slot + 1) + L".bin");
     }
+    static FILE* OpenRead(const std::filesystem::path& path) { return _wfopen(path.c_str(), L"rb"); }
+    static FILE* OpenWrite(const std::filesystem::path& path) { return _wfopen(path.c_str(), L"wb"); }
+#else
+    static std::filesystem::path Path(int32_t slot) {
+        return std::filesystem::path("Save") / ("mergeship_shared_" + std::to_string(slot + 1) + ".bin");
+    }
+    static FILE* OpenRead(const std::filesystem::path& path) { return fopen(path.c_str(), "rb"); }
+    static FILE* OpenWrite(const std::filesystem::path& path) { return fopen(path.c_str(), "wb"); }
+#endif
     static void Reset(MsSharedSave& save, int32_t slot) {
         memset(&save, 0, sizeof(save));
         save.magic = MS_SHARED_SAVE_MAGIC;
