@@ -1,6 +1,8 @@
 #include "Screenshot.h"
 
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 #include <cstdio>
 #include <vector>
@@ -10,6 +12,8 @@
 #endif
 
 namespace MergeShipHost {
+
+#ifdef _WIN32
 
 namespace {
 struct FindState {
@@ -137,5 +141,27 @@ bool CaptureWindowToBmp(void* windowHandle, const std::wstring& path) {
     fclose(out);
     return true;
 }
+
+#else
+
+#include <SDL2/SDL.h>
+
+void* FindGameWindow() {
+    SDL_Window* window = SDL_GetKeyboardFocus();
+    return window != nullptr ? window : SDL_GetMouseFocus();
+}
+
+bool CaptureWindowPixels(void*, std::vector<unsigned char>& pixels, int& width, int& height) {
+    pixels.clear();
+    width = 0;
+    height = 0;
+    return false;
+}
+
+bool CaptureWindowToBmp(void*, const std::wstring&) {
+    return false;
+}
+
+#endif
 
 } // namespace MergeShipHost
