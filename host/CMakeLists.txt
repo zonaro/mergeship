@@ -4,12 +4,13 @@
 # Shipwright/mergeship2/docs/HOST_DESIGN.md.
 #
 # The three trees (this one, SoH's and 2Ship's) are separate CMake builds because their target names
-# collide. Each game tree compiles libultraship again from its own submodule checkout (same commit, checked
-# by build_host.ps1) for its import library and headers; the DLL that ships is this tree's, and the
-# engines refuse to run against a DLL whose LUS_GetAbiId() differs from what they were built against.
+# collide. Windows keeps its established per-engine LUS check from build_host.ps1. The native Linux
+# build points all three trees at the same vendored LUS source directory through MERGESHIP_LUS_SOURCE_DIR;
+# each tree builds an ABI-identical shared libultraship.so and the host stages one copy. The engine loader
+# rejects modules whose embedded LUS_GetAbiId() differs from the runtime library.
 cmake_minimum_required(VERSION 3.26.0 FATAL_ERROR)
 
-if(NOT ANDROID_ABI) # (Android's toolchain sets it to the API level)
+if(WIN32 AND NOT ANDROID_ABI) # Avoid forcing a Windows SDK version on Linux
     set(CMAKE_SYSTEM_VERSION 10.0 CACHE STRING "" FORCE)
 endif()
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "The C++ standard to use")
@@ -55,8 +56,111 @@ if(ANDROID)
     return()
 endif()
 
+# Phase 1: independent loader diagnostic. This target intentionally does not boot a game:
+# hosted SoH/2Ship and shared libultraship still need platform-specific build work.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(MERGESHIP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." CACHE PATH "MergeShip repository root")
+    add_executable(mergeship-linux-probe linux_probe.cpp EngineModule.cpp EngineModule.h)
+    target_include_directories(mergeship-linux-probe PRIVATE "${MERGESHIP_ROOT}/include")
+    target_link_libraries(mergeship-linux-probe PRIVATE ${CMAKE_DL_LIBS})
+    # Compile the existing BSD-socket implementation on Linux as part of every CI build.
+    add_library(mergeship-linux-netservice OBJECT NetService.cpp NetService.h)
+    target_include_directories(mergeship-linux-netservice PRIVATE "${MERGESHIP_ROOT}/include")
+    target_compile_features(mergeship-linux-netservice PRIVATE cxx_std_20)
+    # Compile the shared engine ABI loader as a standalone object too; the probe links its own copy.
+    add_library(mergeship-linux-engine-module OBJECT EngineModule.cpp EngineModule.h)
+    target_include_directories(mergeship-linux-engine-module PRIVATE "${MERGESHIP_ROOT}/include")
+    target_compile_features(mergeship-linux-engine-module PRIVATE cxx_std_20)
+    add_library(mergeship-linux-paths STATIC LinuxPaths.cpp LinuxPaths.h)
+    target_compile_features(mergeship-linux-paths PUBLIC cxx_std_20)
+    add_executable(mergeship-linux-paths-test linux_paths_test.cpp)
+    target_link_libraries(mergeship-linux-paths-test PRIVATE mergeship-linux-paths)
+    include(CTest)
+    if(BUILD_TESTING)
+        # Asset-free ELF test libraries exercise real dlopen/dlsym and ABI validation.
+        foreach(_name IN ITEMS soh 2ship incompatible)
+            add_library(mergeship-mock-${_name} SHARED linux_fake_engine.cpp)
+            target_include_directories(mergeship-mock-${_name} PRIVATE "${MERGESHIP_ROOT}/include")
+        endforeach()
+        target_compile_definitions(mergeship-mock-2ship PRIVATE MERGESHIP_FAKE_ENGINE_ID=MS_ENGINE_2SHIP)
+        target_compile_definitions(mergeship-mock-incompatible PRIVATE MERGESHIP_FAKE_ABI_MISMATCH)
+        add_test(NAME linux-probe-valid-modules COMMAND mergeship-linux-probe
+            "$<TARGET_FILE:mergeship-mock-soh>" "$<TARGET_FILE:mergeship-mock-2ship>")
+        add_test(NAME linux-probe-invalid-abi COMMAND mergeship-linux-probe
+            "$<TARGET_FILE:mergeship-mock-incompatible>" --lus-abi probe-fixture)
+        set_tests_properties(linux-probe-invalid-abi PROPERTIES WILL_FAIL TRUE)
+        add_test(NAME linux-probe-help COMMAND mergeship-linux-probe --help)
+        add_test(NAME linux-paths-config COMMAND mergeship-linux-paths-test)
+        add_test(NAME linux-probe-missing-module COMMAND mergeship-linux-probe
+            "${CMAKE_BINARY_DIR}/does-not-exist/libmissing-soh.so")
+        set_tests_properties(linux-probe-missing-module PROPERTIES WILL_FAIL TRUE)
+    endif()
+    option(MERGESHIP_BUILD_LINUX_HOST "Build the native Linux MergeShip desktop host" ON)
+    if(MERGESHIP_BUILD_LINUX_HOST)
+        set(MERGESHIP_LUS_SOURCE_DIR "${MERGESHIP_ROOT}/Shipwright/libultraship" CACHE PATH
+            "libultraship fork checkout used by both hosted engines")
+
+        # Match the ABI-relevant settings used by the two hosted engine builds.
+        include(${MERGESHIP_ROOT}/Shipwright/CMake/soh-cvars.cmake)
+        file(READ ${MERGESHIP_ROOT}/Shipwright/CMake/lus-cvars.cmake _lus_cvars)
+        string(REGEX REPLACE "include\\([^)]*\\)" "" _lus_cvars "${_lus_cvars}")
+        cmake_language(EVAL CODE "${_lus_cvars}")
+
+        set(SPDLOG_LEVEL_TRACE 0)
+        set(SPDLOG_LEVEL_OFF 6)
+        set(SPDLOG_MIN_CUTOFF SPDLOG_LEVEL_TRACE CACHE STRING "cutoff at trace")
+        set(GFX_DEBUG_DISASSEMBLER ON)
+        set(GBI_UCODE F3DEX_GBI_2)
+        option(MERGESHIP_LINUX_MPQ_SUPPORT "Enable legacy MPQ/StormLib support in hosted Linux builds" OFF)
+        set(INCLUDE_MPQ_SUPPORT ${MERGESHIP_LINUX_MPQ_SUPPORT})
+        add_compile_definitions(CONTROLLERBUTTONS_T=uint32_t)
+
+        set(LUS_SHARED ON CACHE BOOL "" FORCE)
+        set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+        find_package(SDL2 REQUIRED)
+        find_package(Threads REQUIRED)
+        add_subdirectory(${MERGESHIP_LUS_SOURCE_DIR} ${CMAKE_BINARY_DIR}/libultraship SYSTEM)
+        if(INCLUDE_MPQ_SUPPORT)
+            target_compile_definitions(libultraship PUBLIC INCLUDE_MPQ_SUPPORT)
+        endif()
+        target_compile_options(libultraship PRIVATE -w)
+
+        add_executable(mergeship
+            main.cpp
+            EngineModule.cpp
+            EngineModule.h
+            FrameRecorder.cpp
+            FrameRecorder.h
+            NetService.cpp
+            NetService.h
+            Screenshot.cpp
+            Screenshot.h
+        )
+        target_include_directories(mergeship PRIVATE "${MERGESHIP_ROOT}/include")
+        target_compile_definitions(mergeship PRIVATE SDL_MAIN_HANDLED MERGESHIP_LINUX_HOST)
+        target_compile_options(mergeship PRIVATE -Wall -Wextra -Wno-error)
+        target_link_libraries(mergeship PRIVATE
+            libultraship
+            mergeship-linux-paths
+            SDL2::SDL2
+            Threads::Threads
+            ${CMAKE_DL_LIBS}
+        )
+        target_link_options(mergeship PRIVATE "-Wl,-z,stack-size=16777216")
+        set_target_properties(mergeship PROPERTIES
+            BUILD_RPATH "$ORIGIN"
+            INSTALL_RPATH "$ORIGIN"
+            POSITION_INDEPENDENT_CODE ON
+        )
+        message(STATUS "MergeShip Linux desktop host enabled; libultraship ABI ${LUS_ABI_ID}")
+    else()
+        message(STATUS "MergeShip Linux: loader ABI tests only (MERGESHIP_BUILD_LINUX_HOST=OFF)")
+    endif()
+    return()
+endif()
+
 if(NOT MSVC)
-    message(FATAL_ERROR "The MergeShip2 host is Windows/MSVC or Android only for now.")
+    message(FATAL_ERROR "The playable MergeShip host currently requires Windows/MSVC or Android.")
 endif()
 
 set(MERGESHIP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." CACHE PATH "MergeShip2 repository root")

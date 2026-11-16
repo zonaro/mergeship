@@ -1,0 +1,65 @@
+name: Linux hosted engines and native test bundle
+
+on:
+  push:
+    branches: [feature/linux-native-port]
+    paths:
+      - 'host/**'
+      - 'tools/build_linux_engines.sh'
+      - 'tools/install_linux_build_deps.sh'
+      - 'Shipwright/**'
+      - '2ship2harkinian/**'
+      - 'include/mergeship/**'
+      - '.github/workflows/linux-build.yml'
+  pull_request:
+    paths:
+      - 'host/**'
+      - 'tools/build_linux_engines.sh'
+      - 'tools/install_linux_build_deps.sh'
+      - 'Shipwright/**'
+      - '2ship2harkinian/**'
+      - 'include/mergeship/**'
+      - '.github/workflows/linux-build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: linux-hosted-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux-release-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out repository and engine submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install native dependencies
+        run: bash tools/install_linux_build_deps.sh
+
+      - name: Verify build scripts
+        run: |
+          bash -n tools/build_linux_engines.sh
+          bash -n tools/install_linux_build_deps.sh
+          cmake --version
+          ninja --version
+
+      - name: Build both engines, host and staged test bundle
+        env:
+          JOBS: 2
+          CMAKE_BUILD_TYPE: Release
+        run: bash tools/build_linux_engines.sh
+
+      - name: Upload ROM-free native test bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: mergeship-linux-x86_64
+          path: build/linux/mergeship-linux-x86_64.tar.gz
+          if-no-files-found: error
+          retention-days: 14

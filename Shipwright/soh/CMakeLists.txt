@@ -812,6 +812,17 @@ if(MERGESHIP_HOSTED)
     set_source_files_properties(soh/MergeShip/EngineExport.cpp PROPERTIES
                                 COMPILE_DEFINITIONS "LUS_ABI_ID=\"${LUS_ABI_ID}\"")
     set_target_properties(${PROJECT_NAME} PROPERTIES INTERPROCEDURAL_OPTIMIZATION_RELEASE FALSE)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # Each hosted engine must resolve its own game symbols even when both are loaded in one process.
+        set_target_properties(${PROJECT_NAME} PROPERTIES
+            POSITION_INDEPENDENT_CODE ON
+            PREFIX ""
+            OUTPUT_NAME "soh"
+            BUILD_RPATH "$ORIGIN"
+            INSTALL_RPATH "$ORIGIN"
+        )
+        target_link_options(${PROJECT_NAME} PRIVATE -Wl,-Bsymbolic)
+    endif()
 endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")

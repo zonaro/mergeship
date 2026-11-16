@@ -242,7 +242,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE assets
 	${CMAKE_CURRENT_SOURCE_DIR}/include/
 	${CMAKE_CURRENT_SOURCE_DIR}/include/PR
 	${CMAKE_CURRENT_SOURCE_DIR}/src/
-    ${CMAKE_CURRENT_SOURCE_DIR}/../libultraship/include
+    ${MERGESHIP_LUS_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../ZAPDTR/ZAPD/resource/type
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/2s2h/
@@ -663,6 +663,17 @@ if(MERGESHIP_HOSTED)
     # A static libultraship passed its PRIVATE dependencies on to the exe's link; a DLL keeps them.
     find_package(libzip REQUIRED)
     target_link_libraries(${PROJECT_NAME} PRIVATE libzip::zip stb)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # Each hosted engine must resolve its own game symbols even when both are loaded in one process.
+        set_target_properties(${PROJECT_NAME} PROPERTIES
+            POSITION_INDEPENDENT_CODE ON
+            PREFIX ""
+            OUTPUT_NAME "2ship"
+            BUILD_RPATH "$ORIGIN"
+            INSTALL_RPATH "$ORIGIN"
+        )
+        target_link_options(${PROJECT_NAME} PRIVATE -Wl,-Bsymbolic)
+    endif()
 endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")

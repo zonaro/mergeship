@@ -1,6 +1,6 @@
 # MergeShip
 
-Ocarina of Time and Majora's Mask as one game on PC. One program, `mergeship.exe`, runs both
+Ocarina of Time and Majora's Mask as one game on PC. The Windows host (`mergeship.exe`) or experimental Linux host (`mergeship`) runs both
 [Ship of Harkinian](https://github.com/HarbourMasters/Shipwright) (Hyrule) and
 [2 Ship 2 Harkinian](https://github.com/HarbourMasters/2ship2harkinian) (Termina). It switches between them through a
 door in the Lost Woods, with one shared save: hearts, magic, rupees, items, masks and quest status.
@@ -40,7 +40,7 @@ Every MergeShip feature is optional, from the **Mergeship** menu in either game.
 </tr>
 </table>
 
-**No game data is included.** You need your own Ocarina of Time and Majora's Mask ROMs. On its first run the game
+**No game ROM data is included.** You need your own Ocarina of Time and Majora's Mask ROMs. On its first run the game
 builds `oot.o2r` and `mm.o2r` from them.
 
 Player builds: https://odysseyapp.fun/mergeship-dist-latest.zip
@@ -49,7 +49,7 @@ Player builds: https://odysseyapp.fun/mergeship-dist-latest.zip
 
 | Folder | What it is |
 |---|---|
-| `host/` | `mergeship.exe`: loads both engines (`soh.dll`, `2ship.dll`) and hands the window, audio, controllers and the shared save between them |
+| `host/` | `mergeship.exe` / `mergeship`: loads both engines (`soh.dll` / `2ship.dll` on Windows; `soh.so` / `2ship.so` on Linux) and coordinates the shared runtime, window, audio, controllers and shared save |
 | `include/mergeship/` | Code both engines share: the engine API, the shared save, the settings map, sprinting, the menu mirror and more |
 | `Shipwright/` | The Ship of Harkinian fork (its `mergeship2` branch), with its `libultraship` and `torch` |
 | `2ship2harkinian/` | The 2 Ship 2 Harkinian fork (its `mergeship2` branch), with its `libultraship`, `ZAPDTR` and `OTRExporter` |
@@ -73,6 +73,24 @@ powershell -ExecutionPolicy Bypass -File tools\build_host.ps1 -Fast    # after a
 The game is staged into `build\latest`. Run `mergeship.exe` from there and point it at your ROMs on its first run.
 
 Keep line endings as they are (`git config core.autocrlf false`): libultraship's dependency patches need LF.
+
+## Building (experimental Linux port)
+
+The native Linux port is under active development. The current test path builds both hosted engines and the host as ELF shared objects, then stages a ROM-free tar.gz. It is not yet a supported release or an AppImage.
+
+On CachyOS / Arch Linux:
+
+```sh
+bash tools/install_linux_build_deps.sh
+JOBS=4 bash tools/build_linux_engines.sh
+cd build/linux/stage
+./mergeship --check-engines
+./run-mergeship.sh
+```
+
+The first run uses the games' own extractors and asks for your legally obtained OoT and MM ROMs. ROMs and generated `.o2r` archives stay local and are never included in CI artifacts. The initial Linux build disables legacy MPQ/`.otr` support; modern `.o2r` extraction remains enabled. Screenshot and frame recording are not yet available.
+
+See [docs/LINUX_TESTING.md](docs/LINUX_TESTING.md) for dependencies, first-run details and current limitations.
 
 ## Credits and licenses
 

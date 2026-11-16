@@ -26,12 +26,23 @@
 #include <mergeship/SharedSave.h>
 #include <ship/SharedAbi.h>
 
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "LinuxPaths.h"
+#include <SDL.h>
+#include <filesystem>
+#include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+#include <ctime>
+#include <filesystem>
+#include <system_error>
 #include <cwchar>
 #include <map>
 #include <memory>
@@ -40,6 +51,19 @@
 
 using namespace MergeShipHost;
 using Clock = std::chrono::steady_clock;
+#ifdef _WIN32
+using PlatformString = std::wstring;
+PlatformString ToPlatformString(const std::string& value) {
+    if (value.empty()) return {};
+    const int length = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), (int)value.size(), nullptr, 0);
+    std::wstring out(length, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, value.c_str(), (int)value.size(), out.data(), length);
+    return out;
+}
+#else
+using PlatformString = std::string;
+PlatformString ToPlatformString(const std::string& value) { return value; }
+#endif
 
 namespace {
 
@@ -51,11 +75,19 @@ void Logf(const char* format, ...) {
     va_start(args, format);
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
-    SYSTEMTIME time;
-    GetLocalTime(&time);
+    const auto now = std::chrono::system_clock::now();
+    const auto epoch = std::chrono::system_clock::to_time_t(now);
+    std::tm local{};
+#ifdef _WIN32
+    localtime_s(&local, &epoch);
+#else
+    localtime_r(&epoch, &local);
+#endif
+    const auto milliseconds =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
     char line[2200];
-    snprintf(line, sizeof(line), "[%02d:%02d:%02d.%03d] [host] %s\n", time.wHour, time.wMinute, time.wSecond,
-             time.wMilliseconds, buffer);
+    snprintf(line, sizeof(line), "[%02d:%02d:%02d.%03lld] [host] %s\n", local.tm_hour, local.tm_min, local.tm_sec,
+             (long long)milliseconds, buffer);
     fputs(line, stdout);
     fflush(stdout);
     if (sLog != nullptr) {
@@ -68,26 +100,18 @@ struct Options {
     std::string first = "soh";
     std::string only;
     bool muted = false;
-    std::wstring shots;
+    PlatformString shots;
     double quitAfter = 0.0;
     int switchTest = 0;
     double switchSeconds = 0.75;
     int transferTest = 0;
     double settleSeconds = 10.0;
-    std::wstring record;
-    std::wstring ffmpeg;
+    PlatformString record;
+    PlatformString ffmpeg;
     bool debugSwitch = false;
+    bool checkEngines = false;
+    bool help = false;
 };
-
-std::wstring Widen(const std::string& text) {
-    if (text.empty()) {
-        return {};
-    }
-    const int length = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0);
-    std::wstring out(length, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), out.data(), length);
-    return out;
-}
 
 Options ParseOptions(int argc, char** argv) {
     Options options;
@@ -102,7 +126,7 @@ Options ParseOptions(int argc, char** argv) {
         } else if (arg == "--muted") {
             options.muted = true;
         } else if (arg == "--shots") {
-            options.shots = Widen(next());
+            options.shots = ToPlatformString(next());
         } else if (arg == "--quit-after") {
             options.quitAfter = atof(next().c_str());
         } else if (arg == "--switch-test") {
@@ -115,10 +139,14 @@ Options ParseOptions(int argc, char** argv) {
             options.settleSeconds = atof(next().c_str());
         } else if (arg == "--debug-switch") {
             options.debugSwitch = true;
+        } else if (arg == "--check-engines") {
+            options.checkEngines = true;
+        } else if (arg == "--help" || arg == "-h") {
+            options.help = true;
         } else if (arg == "--record") {
-            options.record = Widen(next());
+            options.record = ToPlatformString(next());
         } else if (arg == "--ffmpeg") {
-            options.ffmpeg = Widen(next());
+            options.ffmpeg = ToPlatformString(next());
         } else {
             Logf("ignoring unknown argument %s", arg.c_str());
         }
@@ -126,11 +154,15 @@ Options ParseOptions(int argc, char** argv) {
     return options;
 }
 
-std::wstring ExeDirectory() {
+std::filesystem::path ExeDirectory() {
+#ifdef _WIN32
     wchar_t path[MAX_PATH];
     const DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
     std::wstring dir(path, length);
-    return dir.substr(0, dir.find_last_of(L"\\/"));
+    return std::filesystem::path(dir.substr(0, dir.find_last_of(L"\\/")));
+#else
+    return MergeShipHost::LinuxPaths::ExecutableDirectory();
+#endif
 }
 
 void HostLog(void*, int32_t level, const char* message) {
@@ -146,9 +178,9 @@ const char* EngineKey(int32_t id) {
 // session's) and exit, and a folder without its own config takes that copy. Test runs (a script set) neither take
 // nor refresh it: their configs are the test's.
 void CarryConfigs(bool exiting) {
+#ifdef _WIN32
     static const wchar_t* kFiles[] = { L"shipofharkinian.json", L"2ship2harkinian.json", L"imgui.ini" };
     const wchar_t* appData = _wgetenv(L"APPDATA");
-
     if ((appData == nullptr) || (getenv("MERGESHIP_TEST_SCRIPT_SOH") != nullptr) ||
         (getenv("MERGESHIP_TEST_SCRIPT_2SHIP") != nullptr)) {
         return;
@@ -163,9 +195,16 @@ void CarryConfigs(bool exiting) {
             CopyFileW(name, saved.c_str(), FALSE);
         } else if (!exiting && (GetFileAttributesW(saved.c_str()) != INVALID_FILE_ATTRIBUTES) &&
                    CopyFileW(saved.c_str(), name, TRUE)) {
-            Logf("settings: %ls taken from the last install (%ls)", name, saved.c_str());
+            Logf("settings restored from the previous installation");
         }
     }
+#else
+    try {
+        MergeShipHost::LinuxPaths::CarryConfigs(exiting, std::filesystem::current_path());
+    } catch (const std::exception& error) {
+        Logf("warning: settings persistence failed: %s", error.what());
+    }
+#endif
 }
 
 // The shared saves (include/mergeship/SharedSave.h), one per Ocarina of Time file slot, kept next to SoH's own
@@ -180,7 +219,7 @@ class SharedSaveStore {
         auto save = std::make_unique<MsSharedSave>();
         Reset(*save, slot);
         if (slot >= 0) {
-            if (FILE* file = _wfopen(Path(slot).c_str(), L"rb")) {
+            if (FILE* file = OpenRead(Path(slot))) {
                 auto loadedBuffer = std::make_unique<MsSharedSave>(); // the ledger makes it too big for the stack
                 MsSharedSave& loaded = *loadedBuffer;
                 memset(&loaded, 0, sizeof(loaded));
@@ -223,27 +262,52 @@ class SharedSaveStore {
             return;
         }
         MsSharedSave* save = Get(slot);
-        CreateDirectoryW(L"Save", nullptr);
-        const std::wstring path = Path(slot);
-        const std::wstring temp = path + L".tmp";
-        FILE* file = _wfopen(temp.c_str(), L"wb");
+        std::error_code directoryError;
+        std::filesystem::create_directories("Save", directoryError);
+        if (directoryError) {
+            Logf("ERROR: cannot create shared save directory: %s", directoryError.message().c_str());
+            return;
+        }
+        const std::filesystem::path path = Path(slot);
+        std::filesystem::path temp = path;
+        temp += ".tmp";
+        FILE* file = OpenWrite(temp);
         if (file == nullptr) {
-            Logf("ERROR: cannot write %ls", temp.c_str());
+            Logf("ERROR: cannot open shared save temporary file");
             return;
         }
         const bool ok = fwrite(save, 1, sizeof(*save), file) == sizeof(*save);
+        const bool flushed = fflush(file) == 0;
         fclose(file);
-        if (!ok || !MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
-            Logf("ERROR: cannot write %ls", path.c_str());
+#ifdef _WIN32
+        const bool replaced = MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+#else
+        std::error_code renameError;
+        std::filesystem::rename(temp, path, renameError);
+        const bool replaced = !renameError;
+#endif
+        if (!ok || !flushed || !replaced) {
+            Logf("ERROR: cannot commit shared save (write=%d flush=%d replace=%d)", ok, flushed, replaced);
             return;
         }
         Logf("shared save %d written (generation %u, by %s)", slot, save->generation, EngineKey(save->lastWriter));
     }
 
   private:
-    static std::wstring Path(int32_t slot) {
-        return L"Save\\mergeship_shared_" + std::to_wstring(slot + 1) + L".bin";
+#ifdef _WIN32
+    static std::filesystem::path Path(int32_t slot) {
+        return std::filesystem::path(L"Save") /
+               (L"mergeship_shared_" + std::to_wstring(slot + 1) + L".bin");
     }
+    static FILE* OpenRead(const std::filesystem::path& path) { return _wfopen(path.c_str(), L"rb"); }
+    static FILE* OpenWrite(const std::filesystem::path& path) { return _wfopen(path.c_str(), L"wb"); }
+#else
+    static std::filesystem::path Path(int32_t slot) {
+        return std::filesystem::path("Save") / ("mergeship_shared_" + std::to_string(slot + 1) + ".bin");
+    }
+    static FILE* OpenRead(const std::filesystem::path& path) { return fopen(path.c_str(), "rb"); }
+    static FILE* OpenWrite(const std::filesystem::path& path) { return fopen(path.c_str(), "wb"); }
+#endif
     static void Reset(MsSharedSave& save, int32_t slot) {
         memset(&save, 0, sizeof(save));
         save.magic = MS_SHARED_SAVE_MAGIC;
@@ -257,8 +321,9 @@ class SharedSaveStore {
 
 struct Engine {
     std::string key; // "soh" / "2ship"
-    std::wstring dll;
+    PlatformString dll;
     EngineModule module;
+    bool initialized = false;
 };
 
 class Host {
@@ -468,18 +533,27 @@ void Host::TransferTestStep(double sinceStart) {
 }
 
 bool Host::LoadEngines() {
-    std::vector<std::pair<std::string, std::wstring>> wanted;
+    std::vector<std::pair<std::string, PlatformString>> wanted;
+#ifdef _WIN32
+    const auto modulePath = [](const std::string& key) { return ToPlatformString(key) + L".dll"; };
+#else
+    const auto modulePath = [](const std::string& key) { return "./" + key + ".so"; };
+#endif
     if (!mOptions.only.empty()) {
-        wanted.push_back({ mOptions.only, Widen(mOptions.only) + L".dll" });
+        wanted.push_back({ mOptions.only, modulePath(mOptions.only) });
     } else {
         // The first engine owns the window, audio device and controllers.
         const std::string second = mOptions.first == "soh" ? "2ship" : "soh";
-        wanted.push_back({ mOptions.first, Widen(mOptions.first) + L".dll" });
-        wanted.push_back({ second, Widen(second) + L".dll" });
+        wanted.push_back({ mOptions.first, modulePath(mOptions.first) });
+        wanted.push_back({ second, modulePath(second) });
     }
 
     const char* lusAbi = LUS_GetAbiId();
+#ifdef _WIN32
     Logf("libultraship.dll ABI %s", lusAbi);
+#else
+    Logf("libultraship.so ABI %s", lusAbi);
+#endif
     for (auto& [key, dll] : wanted) {
         auto engine = std::make_unique<Engine>();
         engine->key = key;
@@ -532,6 +606,7 @@ bool Host::InitEngines(int argc, char** argv) {
             Logf("ERROR: %s failed to initialize", engine.module.Name().c_str());
             return false;
         }
+        engine.initialized = true;
         Logf("%s initialized in %.2f s", engine.module.Name().c_str(),
              std::chrono::duration<double>(Clock::now() - start).count());
         if (i > 0) {
@@ -545,10 +620,19 @@ bool Host::InitEngines(int argc, char** argv) {
 }
 
 void Host::SetTitle() {
+#ifdef _WIN32
     if (HWND window = static_cast<HWND>(FindGameWindow())) {
-        const std::wstring title = L"MergeShip2 - " + Widen(mEngines[mActive]->module.Name());
+        const std::wstring title = L"MergeShip2 - " + ToPlatformString(mEngines[mActive]->module.Name());
         SetWindowTextW(window, title.c_str());
     }
+#else
+    SDL_Window* window = SDL_GetKeyboardFocus();
+    if (window == nullptr) window = SDL_GetMouseFocus();
+    if (window != nullptr) {
+        const std::string title = "MergeShip - " + mEngines[mActive]->module.Name();
+        SDL_SetWindowTitle(window, title.c_str());
+    }
+#endif
 }
 
 void Host::Switch(const char* why) {
@@ -570,6 +654,7 @@ void Host::Switch(const char* why) {
 }
 
 void Host::Shot(const wchar_t* name) {
+#ifdef _WIN32
     if (mOptions.shots.empty()) {
         return;
     }
@@ -577,13 +662,22 @@ void Host::Shot(const wchar_t* name) {
     const bool ok = CaptureWindowToBmp(FindGameWindow(), path);
     Logf("screenshot %ls: %s (active %s, frame %llu)", path.c_str(), ok ? "ok" : "FAILED",
          mEngines[mActive]->module.Name().c_str(), (unsigned long long)mFrames);
+#else
+    (void)name;
+    if (!mOptions.shots.empty()) {
+        Logf("screenshots are not available in this initial Linux host build");
+    }
+#endif
 }
 
 void Host::Exit(int code) {
     Logf("shutting down (exit code %d)", code);
     mRecorder.Close();
     for (auto& engine : mEngines) {
-        engine->module.Shutdown();
+        if (engine->initialized) {
+            engine->module.Shutdown();
+            engine->initialized = false;
+        }
     }
     mNet.Shutdown(); // closes the Anchor socket cleanly, so the server sees the player leave at once
     Logf("exit %d", code);
@@ -593,13 +687,22 @@ void Host::Exit(int code) {
     // The games share one window, ImGui context and audio device, and neither can tear those down while
     // the other's objects still point into them. Everything worth keeping (CVars, window placement, saves,
     // logs) was written by Shutdown above.
+#ifdef _WIN32
     TerminateProcess(GetCurrentProcess(), code);
     ExitProcess(code);
+#else
+    std::exit(code);
+#endif
 }
 
 int Host::Run(int argc, char** argv) {
     if (!LoadEngines()) {
         Exit(2);
+    }
+    if (mOptions.checkEngines) {
+        Logf("ENGINE CHECK PASSED: %zu module(s) loaded; exports and libultraship ABI match",
+             mEngines.size());
+        return 0;
     }
     if (!InitEngines(argc, argv)) {
         Exit(3);
@@ -607,7 +710,11 @@ int Host::Run(int argc, char** argv) {
     SetTitle();
     if (!mOptions.record.empty()) {
         mRecorder.Open(mOptions.record, mOptions.ffmpeg);
+#ifdef _WIN32
         Logf("recording every frame to %ls", mOptions.record.c_str());
+#else
+        Logf("frame recording is not available in this initial Linux host build");
+#endif
     }
 
     const auto begin = Clock::now();
@@ -639,12 +746,21 @@ int Host::Run(int argc, char** argv) {
         }
 
         // Ctrl+F12, while our window has focus.
+#ifdef _WIN32
         DWORD foregroundPid = 0;
         GetWindowThreadProcessId(GetForegroundWindow(), &foregroundPid);
         // The low bit catches a press shorter than a frame (a tap, or injected input).
         const SHORT ctrl = GetAsyncKeyState(VK_CONTROL);
         const SHORT f12 = GetAsyncKeyState(VK_F12);
         const bool hotkeyDown = foregroundPid == GetCurrentProcessId() && (ctrl & 0x8001) && (f12 & 0x8001);
+#else
+        SDL_PumpEvents();
+        int keyCount = 0;
+        const Uint8* keys = SDL_GetKeyboardState(&keyCount);
+        const bool hotkeyDown = keys != nullptr && keyCount > SDL_SCANCODE_F12 &&
+                                (keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_RCTRL]) &&
+                                keys[SDL_SCANCODE_F12];
+#endif
         // Normal play starts in Hyrule and reaches Termina only through the door: no hand switch to the other game's
         // title and file select, unless asked for (--debug-switch).
         if (hotkeyDown && !hotkeyWasDown && mOptions.debugSwitch) {
@@ -732,12 +848,30 @@ int Host::Run(int argc, char** argv) {
 
 int main(int argc, char** argv) {
     // Everything (configs, logs, saves, archives) lives next to mergeship.exe, as with the standalone exes.
-    SetCurrentDirectoryW(ExeDirectory().c_str());
+    std::filesystem::current_path(ExeDirectory());
+#ifdef _WIN32
     sLog = _wfopen(L"mergeship-host.log", L"w");
+#else
+    sLog = fopen("mergeship-host.log", "w");
+#endif
     Options options = ParseOptions(argc, argv);
-    Logf("mergeship.exe starting (first engine %s%s)", options.first.c_str(), options.only.empty() ? "" : ", only");
+    if (options.help) {
+        puts("MergeShip native host");
+        puts("  --engine soh|2ship   choose which world starts first (default: soh)");
+        puts("  --only soh|2ship     load one game module");
+        puts("  --check-engines      validate both shared modules and their libultraship ABI without opening a window");
+        puts("  --muted              start with audio muted");
+        puts("  --debug-switch       enable Ctrl+F12 manual world switching");
+        puts("  --help               show this help");
+        return 0;
+    }
+    Logf("mergeship starting (first engine %s%s)", options.first.c_str(), options.only.empty() ? "" : ", only");
     // The games' argv: just the program name; host options are not theirs.
     static char* gameArgv[] = { argv[0], nullptr };
+#ifndef _WIN32
+    // SDL_MAIN_HANDLED is used by the shared host; mark the host's main as ready before either engine calls SDL_Init.
+    SDL_SetMainReady();
+#endif
     CarryConfigs(false);
     Host host(options);
     const int result = host.Run(1, gameArgv);

@@ -28,12 +28,14 @@ if(LUS_SHARED)
     # Deliberately not a PUBLIC define: that would put the commit on every consumer's command line and
     # rebuild whole games on each LUS commit. Consumers read LUS_ABI_ID (cache) into the one file that
     # reports it (see include/ship/SharedAbi.h).
-    set(LUS_ABI_ID "${LUS_GIT_COMMIT}-${_lus_abi_hash}" CACHE INTERNAL "libultraship ABI identity")
+    set(LUS_ABI_ID "${LUS_GIT_COMMIT}-${_lus_abi_hash}" CACHE INTERNAL "libultraship ABI identity" FORCE)
     target_sources(libultraship PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ship/SharedAbi.cpp)
     set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ship/SharedAbi.cpp PROPERTIES
                                 COMPILE_DEFINITIONS "LUS_ABI_ID=\"${LUS_ABI_ID}\"")
     if(MSVC)
         target_link_options(libultraship PRIVATE /DEBUG)
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set_target_properties(libultraship PROPERTIES POSITION_INDEPENDENT_CODE ON)
     endif()
     message(STATUS "libultraship: shared library, ABI ${LUS_ABI_ID}")
 else()
