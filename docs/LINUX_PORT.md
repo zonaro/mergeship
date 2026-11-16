@@ -48,3 +48,7 @@ The probe only tests dynamic loading and the host-defined engine ABI. It **does 
 - Added native Linux XDG config directory helpers and safe settings carry tests in `host/LinuxPaths.*` and `host/linux_paths_test.cpp`. **These functions are not yet connected to the playable host**; pending host platform refactor (#5).
 - Initial workflow exists at `.github/workflows/linux-probe.yml`; full game builds and gameplay tests have not been performed.
 - Local issue #2 (OoT DX and Dungeon/Boss Rush) was triaged separately in #14 and is not a prerequisite for the Linux port.
+
+### Extended loader validation
+- Compiled CI-only fake ELF engine modules (`host/linux_fake_engine.cpp`) to exercise successful `dlopen`, symbol resolution and ABI mismatch rejection. These **are not the actual games**.
+- GitHub Actions [run 43818971449](https://github.com/zonaro/mergeship/actions/runs/43818971449): GCC and Clang both built successfully; **5/5 CTest cases passed** on each compiler.
