@@ -94,7 +94,64 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             "${CMAKE_BINARY_DIR}/does-not-exist/libmissing-soh.so")
         set_tests_properties(linux-probe-missing-module PROPERTIES WILL_FAIL TRUE)
     endif()
-    message(STATUS "MergeShip Linux: loader ABI probe enabled (playable host not yet ported)")
+    option(MERGESHIP_BUILD_LINUX_HOST "Build the native Linux MergeShip desktop host" ON)
+    if(MERGESHIP_BUILD_LINUX_HOST)
+        set(MERGESHIP_LUS_SOURCE_DIR "${MERGESHIP_ROOT}/Shipwright/libultraship" CACHE PATH
+            "libultraship fork checkout used by both hosted engines")
+
+        # Match the ABI-relevant settings used by the two hosted engine builds.
+        include(${MERGESHIP_ROOT}/Shipwright/CMake/soh-cvars.cmake)
+        file(READ ${MERGESHIP_ROOT}/Shipwright/CMake/lus-cvars.cmake _lus_cvars)
+        string(REGEX REPLACE "include\([^)]*\)" "" _lus_cvars "${_lus_cvars}")
+        cmake_language(EVAL CODE "${_lus_cvars}")
+
+        set(SPDLOG_LEVEL_TRACE 0)
+        set(SPDLOG_LEVEL_OFF 6)
+        set(SPDLOG_MIN_CUTOFF SPDLOG_LEVEL_TRACE CACHE STRING "cutoff at trace")
+        set(GFX_DEBUG_DISASSEMBLER ON)
+        set(GBI_UCODE F3DEX_GBI_2)
+        set(INCLUDE_MPQ_SUPPORT ON)
+        add_compile_definitions(CONTROLLERBUTTONS_T=uint32_t)
+
+        set(LUS_SHARED ON CACHE BOOL "" FORCE)
+        set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+        find_package(SDL2 REQUIRED)
+        find_package(Threads REQUIRED)
+        add_subdirectory(${MERGESHIP_LUS_SOURCE_DIR} ${CMAKE_BINARY_DIR}/libultraship SYSTEM)
+        target_compile_definitions(libultraship PUBLIC INCLUDE_MPQ_SUPPORT)
+        target_compile_options(libultraship PRIVATE -w)
+
+        add_executable(mergeship
+            main.cpp
+            EngineModule.cpp
+            EngineModule.h
+            FrameRecorder.cpp
+            FrameRecorder.h
+            NetService.cpp
+            NetService.h
+            Screenshot.cpp
+            Screenshot.h
+        )
+        target_include_directories(mergeship PRIVATE "${MERGESHIP_ROOT}/include")
+        target_compile_definitions(mergeship PRIVATE SDL_MAIN_HANDLED MERGESHIP_LINUX_HOST)
+        target_compile_options(mergeship PRIVATE -Wall -Wextra -Wno-error)
+        target_link_libraries(mergeship PRIVATE
+            libultraship
+            mergeship-linux-paths
+            SDL2::SDL2
+            Threads::Threads
+            ${CMAKE_DL_LIBS}
+        )
+        target_link_options(mergeship PRIVATE "-Wl,-z,stack-size=16777216")
+        set_target_properties(mergeship PROPERTIES
+            BUILD_RPATH "$ORIGIN"
+            INSTALL_RPATH "$ORIGIN"
+            POSITION_INDEPENDENT_CODE ON
+        )
+        message(STATUS "MergeShip Linux desktop host enabled; libultraship ABI ${LUS_ABI_ID}")
+    else()
+        message(STATUS "MergeShip Linux: loader ABI tests only (MERGESHIP_BUILD_LINUX_HOST=OFF)")
+    endif()
     return()
 endif()
 
