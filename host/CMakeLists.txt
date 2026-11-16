@@ -68,6 +68,18 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(mergeship-linux-paths-test PRIVATE mergeship-linux-paths)
     include(CTest)
     if(BUILD_TESTING)
+        # Asset-free ELF test libraries exercise real dlopen/dlsym and ABI validation.
+        foreach(_name IN ITEMS soh 2ship incompatible)
+            add_library(mergeship-mock-${_name} SHARED linux_fake_engine.cpp)
+            target_include_directories(mergeship-mock-${_name} PRIVATE "${MERGESHIP_ROOT}/include")
+        endforeach()
+        target_compile_definitions(mergeship-mock-2ship PRIVATE MERGESHIP_FAKE_ENGINE_ID=MS_ENGINE_2SHIP)
+        target_compile_definitions(mergeship-mock-incompatible PRIVATE MERGESHIP_FAKE_ABI_MISMATCH)
+        add_test(NAME linux-probe-valid-modules COMMAND mergeship-linux-probe
+            "$<TARGET_FILE:mergeship-mock-soh>" "$<TARGET_FILE:mergeship-mock-2ship>")
+        add_test(NAME linux-probe-invalid-abi COMMAND mergeship-linux-probe
+            "$<TARGET_FILE:mergeship-mock-incompatible>" --lus-abi probe-fixture)
+        set_tests_properties(linux-probe-invalid-abi PROPERTIES WILL_FAIL TRUE)
         add_test(NAME linux-probe-help COMMAND mergeship-linux-probe --help)
         add_test(NAME linux-paths-config COMMAND mergeship-linux-paths-test)
         add_test(NAME linux-probe-missing-module COMMAND mergeship-linux-probe
