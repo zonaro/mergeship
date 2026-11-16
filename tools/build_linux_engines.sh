@@ -71,7 +71,9 @@ MM_OUT="$(dirname "$MM_MODULE")"
 
 ROOT_ABS="$(realpath "$ROOT")"
 STAGE_ABS="$(realpath -m "$STAGE")"
-[[ "$STAGE_ABS" != "/" && "$STAGE_ABS" != "$ROOT_ABS" && "$STAGE_ABS" != "$ROOT_ABS/Shipwright" && "$STAGE_ABS" != "$ROOT_ABS/2ship2harkinian" ]] ||
+BUILD_ABS="$(realpath -m "$BUILD")"
+case "$BUILD_ABS/" in "$STAGE_ABS/"*) die "staging path must not contain the build directory: $STAGE_ABS";; esac
+[[ "$STAGE_ABS" != "$BUILD_ABS" && "$STAGE_ABS" != "/" && "$STAGE_ABS" != "$ROOT_ABS" && "$STAGE_ABS" != "$ROOT_ABS/Shipwright" && "$STAGE_ABS" != "$ROOT_ABS/2ship2harkinian" ]] ||
     die "refusing to clear unsafe staging path: $STAGE_ABS"
 
 rm -rf "$STAGE"
