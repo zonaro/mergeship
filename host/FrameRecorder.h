@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace MergeShip {
+namespace MergeShipHost {
 
 #ifdef _WIN32
 using HostPathString = std::wstring;
