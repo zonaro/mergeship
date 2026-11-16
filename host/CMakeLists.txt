@@ -9,7 +9,7 @@
 # engines refuse to run against a DLL whose LUS_GetAbiId() differs from what they were built against.
 cmake_minimum_required(VERSION 3.26.0 FATAL_ERROR)
 
-if(NOT ANDROID_ABI) # (Android's toolchain sets it to the API level)
+if(WIN32 AND NOT ANDROID_ABI) # Avoid forcing a Windows SDK version on Linux
     set(CMAKE_SYSTEM_VERSION 10.0 CACHE STRING "" FORCE)
 endif()
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "The C++ standard to use")
@@ -55,8 +55,19 @@ if(ANDROID)
     return()
 endif()
 
+# Phase 1: independent loader diagnostic. This target intentionally does not boot a game:
+# hosted SoH/2Ship and shared libultraship still need platform-specific build work.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(MERGESHIP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." CACHE PATH "MergeShip repository root")
+    add_executable(mergeship-linux-probe linux_probe.cpp EngineModule.cpp EngineModule.h)
+    target_include_directories(mergeship-linux-probe PRIVATE "${MERGESHIP_ROOT}/include")
+    target_link_libraries(mergeship-linux-probe PRIVATE ${CMAKE_DL_LIBS})
+    message(STATUS "MergeShip Linux: loader ABI probe enabled (playable host not yet ported)")
+    return()
+endif()
+
 if(NOT MSVC)
-    message(FATAL_ERROR "The MergeShip2 host is Windows/MSVC or Android only for now.")
+    message(FATAL_ERROR "The playable MergeShip host currently requires Windows/MSVC or Android.")
 endif()
 
 set(MERGESHIP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." CACHE PATH "MergeShip2 repository root")
