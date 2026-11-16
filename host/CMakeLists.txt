@@ -102,7 +102,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         # Match the ABI-relevant settings used by the two hosted engine builds.
         include(${MERGESHIP_ROOT}/Shipwright/CMake/soh-cvars.cmake)
         file(READ ${MERGESHIP_ROOT}/Shipwright/CMake/lus-cvars.cmake _lus_cvars)
-        string(REGEX REPLACE "include\([^)]*\)" "" _lus_cvars "${_lus_cvars}")
+        string(REGEX REPLACE "include\\([^)]*\\)" "" _lus_cvars "${_lus_cvars}")
         cmake_language(EVAL CODE "${_lus_cvars}")
 
         set(SPDLOG_LEVEL_TRACE 0)
