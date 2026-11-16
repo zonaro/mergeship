@@ -1,20 +1,30 @@
 # Architecture and invariants
 
-## Current host
-- Desktop host: `host/main.cpp`, `host/FrameRecorder.cpp`, `host/Screenshot.cpp`; currently Win32-dependent.
-- Generic loader: `host/EngineModule.cpp`; uses Win32 DLL APIs or `dlopen(RTLD_NOW | RTLD_LOCAL)` on ELF/Android.
-- `host/NetService.cpp` already implements a non-Windows BSD sockets path.
-- Host exports and contracts live in `include/mergeship/EngineApi.h`; per-engine exported `MsEngine_*` functions are resolved dynamically.
-- Host standalone Linux probe: `host/linux_probe.cpp`, **does not start either game**.
+## Native Linux host (implementation in progress)
+- Host executable: `host/main.cpp`; Linux path uses POSIX filesystem/process behavior and SDL2 for the focused window title and Ctrl+F12 state.
+- Shared host runtime: `libultraship.so`; host links it directly and both game modules depend on the same SONAME.
+- Engine loader: `host/EngineModule.cpp`; uses `dlopen(RTLD_NOW | RTLD_LOCAL)` on ELF.
+- Linux module names are `soh.so` and `2ship.so`, loaded from the executable directory.
+- The Linux build uses the single source tree `Shipwright/libultraship` for SoH, 2Ship and host. 2Ship's CMake source/include paths are configurable with `MERGESHIP_LUS_SOURCE_DIR`; Linux build script sets it explicitly.
+- Shared engine ABI is recomputed from source commit and ABI-affecting CMake options on every configure. The host rejects mismatches.
+- `host/linux_probe.cpp` remains a separate asset-free loader test; it is not the playable host.
 
-## Non-negotiable runtime layout
+## Runtime layout
 ```
-mergeship (host)
-  ├── libultraship.so (one shared runtime and ABI)
-  ├── libsoh.so (OoT, isolated per-engine context)
-  └── lib2ship.so (MM, isolated per-engine context)
+stage/
+  mergeship
+  libultraship.so
+  soh.so
+  2ship.so
+  soh.o2r
+  mergeship2.o2r
+  2ship.o2r
+  assets/                 # public extractor metadata only
+  run-mergeship.sh
 ```
-Three separate build trees avoid CMake target collisions. Resources, factories, CVars and caches must remain isolated per game, while the window, input deck, graphics renderer and audio runtime are shared.
+The first launch uses the games' own extraction flow to create local `oot.o2r` and `mm.o2r` from user-supplied ROMs. Those ROMs and derived archives must never enter source control, CI artifacts or releases.
+
+Three separate CMake build trees avoid target-name collisions. The same LUS source tree and ABI-relevant settings must be used in all three. At runtime only the host's `libultraship.so` is staged; module `RUNPATH=$ORIGIN` and host `RPATH=$ORIGIN` make the local runtime discoverable. `RTLD_LOCAL` and ELF `-Bsymbolic` reduce cross-engine symbol interposition.
 
 ## Cross-game behavior
 - The normal OoT and MM stories must function with randomizer OFF.
@@ -23,11 +33,11 @@ Three separate build trees avoid CMake target collisions. Resources, factories, 
 - Shared-save versioning and per-game original save files must remain compatible; never mutate or discard user saves without backups.
 
 ## Platform boundaries
-- Use conditional platform modules rather than leaking Win32 handles, paths and system functions into common APIs.
-- Treat Linux/Wayland and Linux/X11 distinctly for screenshots and window discovery.
-- Preserve Windows and Android support.
-- Reuse ELF loader code but verify symbol visibility, LUS ABI and the two engines' symbol isolation.
-- Prefer C++ standard filesystem and SDL where appropriate, not a new UI framework.
+- Keep Win32 APIs inside `_WIN32` branches; preserve Windows and Android behavior.
+- Linux configuration carry uses XDG config directories; shared-save commits use a temporary file and atomic rename.
+- SDL2 is used for Linux title updates and the manual hotkey. Game engines still own the actual SDL window/event loop.
+- Screenshot and frame recording currently have explicit Linux stubs; do not claim those features work until a real capture backend exists.
+- Legacy MPQ/`.otr` support is disabled in the first hosted Linux build because the pinned StormLib patch no longer applies. The modern `.o2r` path remains enabled. Optional restoration is tracked in #26.
 
 ## Code and licensing
 - Respect all existing root AGENTS.md restrictions.
