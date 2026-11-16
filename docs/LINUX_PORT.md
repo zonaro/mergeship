@@ -52,3 +52,11 @@ The probe only tests dynamic loading and the host-defined engine ABI. It **does 
 ### Extended loader validation
 - Compiled CI-only fake ELF engine modules (`host/linux_fake_engine.cpp`) to exercise successful `dlopen`, symbol resolution and ABI mismatch rejection. These **are not the actual games**.
 - GitHub Actions [run 43818971449](https://github.com/zonaro/mergeship/actions/runs/43818971449): GCC and Clang both built successfully; **5/5 CTest cases passed** on each compiler.
+
+## Hosted engine build preparation — 2026-11-16
+
+- Enabled position-independent code for hosted Linux SoH and 2Ship builds, including LUS shared objects.
+- Added ELF `-Wl,-Bsymbolic` to both hosted game modules to reduce cross-engine symbol interposition when loaded together. The host loader continues to use `RTLD_LOCAL`.
+- Added `tools/build_linux_engines.sh`: separate Ninja/CMake trees, `MERGESHIP_HOSTED=ON`, exact LUS submodule revision parity check, and builds of each game plus its project-owned OTR target.
+- CI now validates the script syntax and watches the engine CMake files.
+- **Not yet verified:** full game-engine configuration/compilation, shared runtime ABI parity, and actual module startup. The build script has not been executed in a Linux environment with all dependencies installed. Its success message is explicitly limited to engine module builds, not a playable host.
