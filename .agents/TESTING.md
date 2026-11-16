@@ -10,6 +10,7 @@ ctest --test-dir build/linux-host --output-on-failure
 - `--help`: exit 0, prints its diagnostic purpose.
 - Missing `.so`: nonzero exit, explanatory `dlopen` error.
 - Shared objects with missing `MsEngine_*` exports: nonzero exit.
+- Asset-free mock ELF libraries: loading two modules with a matching ABI must succeed; incompatible LUS ABI must fail. These fixtures exercise the loader, **not actual gameplay**.
 - Modules with incompatible API and LUS IDs: nonzero exit.
 - These tests do **not** prove engine startup or standalone game functionality.
 
