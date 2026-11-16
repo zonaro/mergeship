@@ -537,7 +537,7 @@ bool Host::LoadEngines() {
 #ifdef _WIN32
     const auto modulePath = [](const std::string& key) { return ToPlatformString(key) + L".dll"; };
 #else
-    const auto modulePath = [](const std::string& key) { return key + ".so"; };
+    const auto modulePath = [](const std::string& key) { return "./" + key + ".so"; };
 #endif
     if (!mOptions.only.empty()) {
         wanted.push_back({ mOptions.only, modulePath(mOptions.only) });
