@@ -22,6 +22,10 @@ on:
       - '.github/workflows/linux-build.yml'
   workflow_dispatch:
 
+concurrency:
+  group: linux-hosted-build-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
