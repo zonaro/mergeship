@@ -113,7 +113,12 @@ set(GBI_UCODE F3DEX_GBI_2)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
 
 # Enable MPQ and OTR support
-set(INCLUDE_MPQ_SUPPORT ON)
+option(MERGESHIP_LINUX_MPQ_SUPPORT "Enable legacy MPQ/StormLib support in hosted Linux builds" OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND MERGESHIP_HOSTED)
+    set(INCLUDE_MPQ_SUPPORT ${MERGESHIP_LINUX_MPQ_SUPPORT})
+else()
+    set(INCLUDE_MPQ_SUPPORT ON)
+endif()
 
 ################################################################################
 # Set target arch type if empty. Visual studio solution generator provides it.
@@ -207,7 +212,9 @@ add_compile_definitions(CONTROLLERBUTTONS_T=uint32_t)
 # Sub-projects
 ################################################################################
 add_subdirectory(${MERGESHIP_LUS_SOURCE_DIR} ${CMAKE_BINARY_DIR}/libultraship)
-target_compile_definitions(libultraship PUBLIC INCLUDE_MPQ_SUPPORT)
+if(INCLUDE_MPQ_SUPPORT)
+    target_compile_definitions(libultraship PUBLIC INCLUDE_MPQ_SUPPORT)
+endif()
 
 # LUS ships no PCH of its own and these headers dominate its build. Done here rather than in the
 # submodule, and PRIVATE, so nothing about its public interface changes.
