@@ -60,3 +60,10 @@ The probe only tests dynamic loading and the host-defined engine ABI. It **does 
 - Added `tools/build_linux_engines.sh`: separate Ninja/CMake trees, `MERGESHIP_HOSTED=ON`, exact LUS submodule revision parity check, and builds of each game plus its project-owned OTR target.
 - CI now validates the script syntax and watches the engine CMake files.
 - **Not yet verified:** full game-engine configuration/compilation, shared runtime ABI parity, and actual module startup. The build script has not been executed in a Linux environment with all dependencies installed. Its success message is explicitly limited to engine module builds, not a playable host.
+
+## Host networking compilation coverage — 2026-11-16
+
+- Added a dedicated Linux CMake object target for `host/NetService.cpp`. Its POSIX socket branch already uses BSD sockets, non-blocking connect, `select`, `MSG_NOSIGNAL`, and TCP keepalive; it is now compiled by the Linux CI build rather than being left unverified.
+- Added a separate object target for `EngineModule.cpp` to keep the ELF loader independently compile-checked.
+- These are compile checks only: Anchor server interoperability and network behavior still need integration tests.
+- The full host remains blocked by Win32-only main-loop/window discovery, screenshot and frame-recorder implementations. Linux screenshot/video capture is not silently advertised as supported.
