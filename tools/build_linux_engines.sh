@@ -18,14 +18,12 @@ need pkg-config
 if [[ "$GENERATOR" == "Ninja" ]]; then need ninja; fi
 
 for dir in "$ROOT/Shipwright" "$ROOT/2ship2harkinian"; do
-    [[ -f "$dir/CMakeLists.txt" ]] || die "missing engine checkout: $dir"
-    [[ -e "$dir/libultraship/.git" ]] || die "libultraship submodule missing in $dir; run git submodule update --init --recursive"
+    [[ -f "$dir/CMakeLists.txt" ]] || die "missing engine source tree: $dir"
 done
-
-SOH_LUS="$(git -C "$ROOT/Shipwright/libultraship" rev-parse HEAD)"
-MM_LUS="$(git -C "$ROOT/2ship2harkinian/libultraship" rev-parse HEAD)"
-[[ "$SOH_LUS" == "$MM_LUS" ]] || die "libultraship revisions differ: SoH=$SOH_LUS 2Ship=$MM_LUS"
-echo "Shared libultraship source: $SOH_LUS"
+LUS_SOURCE="$ROOT/Shipwright/libultraship"
+[[ -f "$LUS_SOURCE/CMakeLists.txt" && -f "$LUS_SOURCE/src/CMakeLists.txt" ]] ||
+    die "the shared libultraship source tree is incomplete: $LUS_SOURCE"
+echo "Using one libultraship source for SoH, 2Ship and host: $LUS_SOURCE"
 
 # Native dependencies are provided by the distro. The CI workflow installs the Ubuntu equivalents.
 for package in sdl2 glew glfw3 libzip libogg vorbis opus opusfile; do
@@ -55,10 +53,10 @@ mkdir -p "$BUILD"
 configure soh Shipwright -DMERGESHIP_HOSTED=ON -DSUPPRESS_WARNINGS=ON
 build soh soh GenerateSohOtr
 
-configure 2ship 2ship2harkinian -DMERGESHIP_HOSTED=ON
+configure 2ship 2ship2harkinian -DMERGESHIP_HOSTED=ON -DMERGESHIP_LUS_SOURCE_DIR="$LUS_SOURCE"
 build 2ship 2ship Generate2ShipOtr
 
-configure host host -DMERGESHIP_BUILD_LINUX_HOST=ON
+configure host host -DMERGESHIP_BUILD_LINUX_HOST=ON -DMERGESHIP_LUS_SOURCE_DIR="$LUS_SOURCE"
 build host mergeship
 
 SOH_MODULE="$(find_one "$BUILD/soh" soh.so)"
