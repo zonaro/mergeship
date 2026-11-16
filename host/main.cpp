@@ -26,7 +26,14 @@
 #include <mergeship/SharedSave.h>
 #include <ship/SharedAbi.h>
 
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "LinuxPaths.h"
+#include <SDL2/SDL.h>
+#include <filesystem>
+#include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdarg>
@@ -40,6 +47,19 @@
 
 using namespace MergeShipHost;
 using Clock = std::chrono::steady_clock;
+#ifdef _WIN32
+using PlatformString = std::wstring;
+PlatformString ToPlatformString(const std::string& value) {
+    if (value.empty()) return {};
+    const int length = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), (int)value.size(), nullptr, 0);
+    std::wstring out(length, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, value.c_str(), (int)value.size(), out.data(), length);
+    return out;
+}
+#else
+using PlatformString = std::string;
+PlatformString ToPlatformString(const std::string& value) { return value; }
+#endif
 
 namespace {
 
@@ -51,11 +71,19 @@ void Logf(const char* format, ...) {
     va_start(args, format);
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
-    SYSTEMTIME time;
-    GetLocalTime(&time);
+    const auto now = std::chrono::system_clock::now();
+    const auto epoch = std::chrono::system_clock::to_time_t(now);
+    std::tm local{};
+#ifdef _WIN32
+    localtime_s(&local, &epoch);
+#else
+    localtime_r(&epoch, &local);
+#endif
+    const auto milliseconds =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
     char line[2200];
-    snprintf(line, sizeof(line), "[%02d:%02d:%02d.%03d] [host] %s\n", time.wHour, time.wMinute, time.wSecond,
-             time.wMilliseconds, buffer);
+    snprintf(line, sizeof(line), "[%02d:%02d:%02d.%03lld] [host] %s\n", local.tm_hour, local.tm_min, local.tm_sec,
+             (long long)milliseconds, buffer);
     fputs(line, stdout);
     fflush(stdout);
     if (sLog != nullptr) {
@@ -68,26 +96,16 @@ struct Options {
     std::string first = "soh";
     std::string only;
     bool muted = false;
-    std::wstring shots;
+    PlatformString shots;
     double quitAfter = 0.0;
     int switchTest = 0;
     double switchSeconds = 0.75;
     int transferTest = 0;
     double settleSeconds = 10.0;
-    std::wstring record;
-    std::wstring ffmpeg;
+    PlatformString record;
+    PlatformString ffmpeg;
     bool debugSwitch = false;
 };
-
-std::wstring Widen(const std::string& text) {
-    if (text.empty()) {
-        return {};
-    }
-    const int length = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0);
-    std::wstring out(length, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), out.data(), length);
-    return out;
-}
 
 Options ParseOptions(int argc, char** argv) {
     Options options;
@@ -102,7 +120,7 @@ Options ParseOptions(int argc, char** argv) {
         } else if (arg == "--muted") {
             options.muted = true;
         } else if (arg == "--shots") {
-            options.shots = Widen(next());
+            options.shots = ToPlatformString(next());
         } else if (arg == "--quit-after") {
             options.quitAfter = atof(next().c_str());
         } else if (arg == "--switch-test") {
@@ -116,9 +134,9 @@ Options ParseOptions(int argc, char** argv) {
         } else if (arg == "--debug-switch") {
             options.debugSwitch = true;
         } else if (arg == "--record") {
-            options.record = Widen(next());
+            options.record = ToPlatformString(next());
         } else if (arg == "--ffmpeg") {
-            options.ffmpeg = Widen(next());
+            options.ffmpeg = ToPlatformString(next());
         } else {
             Logf("ignoring unknown argument %s", arg.c_str());
         }
