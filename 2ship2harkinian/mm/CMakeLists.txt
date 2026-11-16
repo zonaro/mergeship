@@ -663,6 +663,11 @@ if(MERGESHIP_HOSTED)
     # A static libultraship passed its PRIVATE dependencies on to the exe's link; a DLL keeps them.
     find_package(libzip REQUIRED)
     target_link_libraries(${PROJECT_NAME} PRIVATE libzip::zip stb)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # Each hosted engine must resolve its own game symbols even when both are loaded in one process.
+        set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+        target_link_options(${PROJECT_NAME} PRIVATE -Wl,-Bsymbolic)
+    endif()
 endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")
