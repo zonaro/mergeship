@@ -26,7 +26,7 @@ LUS_SOURCE="$ROOT/Shipwright/libultraship"
 echo "Using one libultraship source for SoH, 2Ship and host: $LUS_SOURCE"
 
 # Native dependencies are provided by the distro. The CI workflow installs the Ubuntu equivalents.
-for package in sdl2 glew glfw3 libzip libogg vorbis opus opusfile; do
+for package in sdl2 glew glfw3 libzip ogg vorbis opus opusfile; do
     pkg-config --exists "$package" 2>/dev/null || echo "NOTE: pkg-config could not find '$package'; CMake will perform the authoritative dependency check."
 done
 
