@@ -5,6 +5,12 @@ on:
     branches: [feature/linux-native-port]
     paths:
       - 'host/**'
+      - 'tools/build_linux_engines.sh'
+      - 'Shipwright/CMakeLists.txt'
+      - 'Shipwright/soh/CMakeLists.txt'
+      - 'Shipwright/libultraship/src/CMakeLists.txt'
+      - '2ship2harkinian/CMakeLists.txt'
+      - '2ship2harkinian/mm/CMakeLists.txt'
       - 'include/mergeship/**'
       - '.github/workflows/linux-probe.yml'
   pull_request:
@@ -28,6 +34,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build cmake g++ clang
+      - name: Validate Linux engine build script
+        run: bash -n tools/build_linux_engines.sh
       - name: Configure probe
         env:
           CC: ${{ matrix.compiler == 'gcc' && 'gcc' || 'clang' }}
