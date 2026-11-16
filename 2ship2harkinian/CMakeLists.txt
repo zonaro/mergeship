@@ -7,6 +7,9 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X deployment ve
 set(GAME_STR "MM")
 project(2s2h VERSION 5.0.1 LANGUAGES C CXX)
 include(CMake/2ship-cvars.cmake)
+# MergeShip2 hosted builds can point at the exact same libultraship source used by SoH and the host.
+# The default remains this checkout's local copy for standalone and existing Windows builds.
+set(MERGESHIP_LUS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libultraship" CACHE PATH "libultraship source tree")
 include(CMake/lus-cvars.cmake)
 set(SPDLOG_LEVEL_TRACE 0)
 set(SPDLOG_LEVEL_OFF 6)
@@ -203,7 +206,7 @@ add_compile_definitions(CONTROLLERBUTTONS_T=uint32_t)
 ################################################################################
 # Sub-projects
 ################################################################################
-add_subdirectory(libultraship ${CMAKE_BINARY_DIR}/libultraship)
+add_subdirectory(${MERGESHIP_LUS_SOURCE_DIR} ${CMAKE_BINARY_DIR}/libultraship)
 target_compile_definitions(libultraship PUBLIC INCLUDE_MPQ_SUPPORT)
 
 # LUS ships no PCH of its own and these headers dominate its build. Done here rather than in the
